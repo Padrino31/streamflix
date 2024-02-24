@@ -1,5 +1,6 @@
 package com.tanasi.streamflix.providers
 
+import android.annotation.SuppressLint
 import com.tanasi.retrofit_jsoup.converter.JsoupConverterFactory
 import com.tanasi.streamflix.adapters.AppAdapter
 import com.tanasi.streamflix.extractors.Extractor
@@ -25,8 +26,8 @@ import java.util.concurrent.TimeUnit
 
 object SflixProvider : Provider {
 
-    override val name = "SFlix"
-    override val logo = "https://img.sflix.to/xxrz/400x400/100/66/35/66356c25ce98cb12993249e21742b129/66356c25ce98cb12993249e21742b129.png"
+    override val name = "Netflix"
+    override val logo = "https://od.lk/s/OTBfNDA3MzM5OThf/-11621687999bdzjjrtqvy-removebg-preview.png"
     override val url = "https://sflix.to/"
 
     private val service = SflixService.build()
@@ -675,6 +676,7 @@ object SflixProvider : Provider {
         return people
     }
 
+    @SuppressLint("UnsafeOptInUsageError")
     override suspend fun getServers(id: String, videoType: PlayerFragment.VideoType): List<Video.Server> {
         val servers = when (videoType) {
             is PlayerFragment.VideoType.Movie -> service.getMovieServers(id)
