@@ -1,5 +1,6 @@
 package com.tanasi.streamflix.providers
 
+import android.annotation.SuppressLint
 import com.tanasi.retrofit_jsoup.converter.JsoupConverterFactory
 import com.tanasi.streamflix.adapters.AppAdapter
 import com.tanasi.streamflix.extractors.Extractor
@@ -623,6 +624,7 @@ object AniwatchProvider : Provider {
     }
 
 
+    @SuppressLint("UnsafeOptInUsageError")
     override suspend fun getServers(id: String, videoType: PlayerFragment.VideoType): List<Video.Server> {
         val episodeId = when (videoType) {
             is PlayerFragment.VideoType.Movie -> {

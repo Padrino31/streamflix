@@ -8,6 +8,7 @@ import androidx.tvprovider.media.tv.WatchNextProgram
 @SuppressLint("RestrictedApi")
 object WatchNextUtils {
 
+    @SuppressLint("UnsafeOptInUsageError")
     fun programs(context: Context): List<WatchNextProgram> {
         return context.contentResolver.query(
             TvContractCompat.WatchNextPrograms.CONTENT_URI,
@@ -28,6 +29,7 @@ object WatchNextUtils {
         )
     }
 
+    @SuppressLint("UnsafeOptInUsageError")
     fun getProgram(context: Context, contentId: String): WatchNextProgram? {
         return context.contentResolver.query(
             TvContractCompat.WatchNextPrograms.CONTENT_URI,
