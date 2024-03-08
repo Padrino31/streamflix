@@ -21,12 +21,17 @@ object UserPreferences {
             "${BuildConfig.APPLICATION_ID}.preferences",
             Context.MODE_PRIVATE,
         )
+
+        // If there's only one provider available and no current provider is set, set it as default
+        if (providers.size == 1 && currentProvider == null) {
+            currentProvider = providers.first()
+        }
     }
 
 
     val providers = listOf(
-        SflixProvider,
-        AnyMovieProvider,
+//        SflixProvider,
+//        AnyMovieProvider,
         AniwatchProvider,
     )
 

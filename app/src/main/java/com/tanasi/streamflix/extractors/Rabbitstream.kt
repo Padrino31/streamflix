@@ -27,7 +27,7 @@ open class Rabbitstream : Extractor() {
     override val name = "Rabbitstream"
     override val mainUrl = "https://rabbitstream.net"
     protected open val embed = "ajax/embed-4"
-    protected open val key = "https://keys4.fun"
+    protected open val key = "http://zoro-keys.freeddns.org/keys/e4/key.txt"
 
     override suspend fun extract(link: String): Video {
         val service = Service.build(mainUrl)
@@ -41,7 +41,7 @@ open class Rabbitstream : Extractor() {
         val sources = when (response) {
             is Service.Sources -> response
             is Service.Sources.Encrypted -> response.decrypt(
-                keys = service.getSourceEncryptedKey(key).rabbitstream.keys
+                enikey = service.getSourceEncryptedKey(key)
             )
         }
 
@@ -65,6 +65,7 @@ open class Rabbitstream : Extractor() {
         override val name = "Megacloud"
         override val mainUrl = "https://megacloud.tv"
         override val embed = "embed-2/ajax/e-1"
+        override val key = "http://zoro-keys.freeddns.org/keys/e6/key.txt"
     }
 
     class Dokicloud : Rabbitstream() {
@@ -111,7 +112,7 @@ open class Rabbitstream : Extractor() {
         ): SourcesResponse
 
         @GET
-        suspend fun getSourceEncryptedKey(@Url url: String): KeysResponse
+        suspend fun getSourceEncryptedKey(@Url url: String): List<List<Int>>
 
 
         sealed class SourcesResponse {
@@ -144,9 +145,25 @@ open class Rabbitstream : Extractor() {
                 val tracks: List<Track> = listOf(),
                 val server: Int? = null,
             ) : SourcesResponse() {
-                fun decrypt(keys: List<Int>): Sources {
-                    fun List<Int>.toByteArray(): ByteArray {
-                        return ByteArray(size) { index -> this[index].toByte() }
+                fun decrypt(enikey: List<List<Int>>): Sources {
+                    fun extract(
+                        encryptedSources: String,
+                        key: List<List<Int>>
+                    ): Pair<String, String> {
+                        var extractedSources = ""
+                        var extractedKey = ""
+
+                        for (i in encryptedSources.indices) {
+                            val currentKey = key.firstOrNull { i < it[1] } ?: key[0]
+
+                            if (i in currentKey[0] until currentKey[1]) {
+                                extractedKey += encryptedSources[i]
+                            } else {
+                                extractedSources += encryptedSources[i]
+                            }
+                        }
+
+                        return extractedSources to extractedKey
                     }
 
                     fun decryptSourceUrl(decryptionKey: ByteArray, sourceUrl: String): String {
@@ -178,14 +195,14 @@ open class Rabbitstream : Extractor() {
                         return currentKey
                     }
 
-                    val keyString = Base64.encodeToString(keys.toByteArray(), Base64.NO_WRAP)
+                    val (extractedSources, extractedKey) = extract(sources, enikey)
 
                     val decrypted = decryptSourceUrl(
                         generateKey(
-                            Base64.decode(sources, Base64.DEFAULT).copyOfRange(8, 16),
-                            keyString.toByteArray(),
+                            Base64.decode(extractedSources, Base64.DEFAULT).copyOfRange(8, 16),
+                            extractedKey.toByteArray(),
                         ),
-                        sources,
+                        extractedSources,
                     )
 
                     return Sources(
@@ -205,16 +222,6 @@ open class Rabbitstream : Extractor() {
                 val label: String = "",
                 val kind: String = "",
                 val default: Boolean = false,
-            )
-        }
-
-        data class KeysResponse(
-            val rabbitstream: Keys,
-        ) {
-
-            data class Keys(
-                val keys: List<Int>,
-                val updated_at: Int,
             )
         }
     }

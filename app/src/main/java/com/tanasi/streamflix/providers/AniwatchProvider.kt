@@ -27,7 +27,7 @@ object AniwatchProvider : Provider {
 
     override val name = "Aniwatch"
     override val logo = "https://aniwatch.to/images/logo.png"
-    override val url = "https://aniwatch.to/"
+    override val url = "https://aniwatchtv.to/"
 
     private val service = AniwatchService.build()
 
