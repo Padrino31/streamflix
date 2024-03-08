@@ -14,9 +14,8 @@ import com.tanasi.streamflix.models.Season
 import com.tanasi.streamflix.models.TvShow
 import com.tanasi.streamflix.models.Video
 import okhttp3.OkHttpClient
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
-import org.jsoup.select.Elements
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
@@ -26,11 +25,11 @@ import java.util.concurrent.TimeUnit
 
 object SflixProvider : Provider {
 
-    override val name = "Netflix"
-    override val logo = "https://od.lk/s/OTBfNDA3MzM5OThf/-11621687999bdzjjrtqvy-removebg-preview.png"
-    override val url = "https://sflix.to/"
+    override val name = "Hianime"
+    override val logo = "https://hianime.to/images/logo.png"
+    override val url = "https://hianime.to/"
 
-    private val service = SflixService.build()
+    private val service = AniwatchService.build()
 
 
     override suspend fun getHome(): List<Category> {
@@ -41,28 +40,32 @@ object SflixProvider : Provider {
         categories.add(
             Category(
                 name = Category.FEATURED,
-                list = document.select("div.swiper-wrapper > div.swiper-slide").map {
+                list = document.select("div#slider div.swiper-slide").map {
                     val id = it.selectFirst("a")
-                        ?.attr("href")?.substringAfterLast("-") ?: ""
-                    val title = it.selectFirst("h2.film-title")
+                        ?.attr("href")?.substringAfterLast("/") ?: ""
+                    val title = it.selectFirst("div.desi-head-title")
                         ?.text() ?: ""
-                    val overview = it.selectFirst("p.sc-desc")
+                    val overview = it.selectFirst("div.desi-description")
                         ?.text() ?: ""
-                    val info = it.select("div.sc-detail > div.scd-item").toInfo()
-                    val poster = it.selectFirst("img.film-poster-img")
-                        ?.attr("src")
-                    val banner = it.selectFirst("div.slide-photo img")
-                        ?.attr("src")
+                    val runtime = it.select("div.scd-item").firstOrNull { element ->
+                        element.selectFirst("i.fa-clock") != null
+                    }?.text()?.removeSuffix("m")?.toIntOrNull()
+                    val quality = it.selectFirst("div.quality")
+                        ?.text()
+                    val banner = it.selectFirst("img.film-poster-img")
+                        ?.attr("data-src")
 
-                    if (it.isMovie()) {
+                    val isMovie = it.select("div.scd-item").firstOrNull { element ->
+                        element.selectFirst("i.fa-play-circle") != null
+                    }?.text() == "Movie"
+
+                    if (isMovie) {
                         Movie(
                             id = id,
                             title = title,
                             overview = overview,
-                            released = info.released,
-                            quality = info.quality,
-                            rating = info.rating,
-                            poster = poster,
+                            runtime = runtime,
+                            quality = quality,
                             banner = banner,
                         )
                     } else {
@@ -70,150 +73,140 @@ object SflixProvider : Provider {
                             id = id,
                             title = title,
                             overview = overview,
-                            quality = info.quality,
-                            rating = info.rating,
-                            poster = poster,
+                            runtime = runtime,
+                            quality = quality,
                             banner = banner,
 
-                            seasons = info.lastEpisode?.let { lastEpisode ->
-                                listOf(
-                                    Season(
-                                        id = "",
-                                        number = lastEpisode.season,
+                            seasons = it.selectFirst("div.tick-sub")
+                                ?.text()?.toIntOrNull()?.let { lastEpisode ->
+                                    listOf(
+                                        Season(
+                                            id = "",
+                                            number = 0,
 
-                                        episodes = listOf(
-                                            Episode(
-                                                id = "",
-                                                number = lastEpisode.episode,
+                                            episodes = listOf(
+                                                Episode(
+                                                    id = "",
+                                                    number = lastEpisode,
+                                                )
                                             )
                                         )
                                     )
-                                )
-                            } ?: listOf(),
+                                } ?: listOf(),
                         )
                     }
                 },
             )
         )
 
-        categories.add(
-            Category(
-                name = "Trending Movies",
-                list = document.select("div#trending-movies div.flw-item").map {
-                    val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
+        categories.addAll(
+            document.select("div.anif-block").map { block ->
+                Category(
+                    name = block.selectFirst("div.anif-block-header")
+                        ?.text() ?: "",
+                    list = block.select("li").map {
+                        val id = it.selectFirst("a")
+                            ?.attr("href")?.substringAfterLast("/") ?: ""
+                        val title = it.selectFirst("h3.film-name")
+                            ?.text() ?: ""
+                        val poster = it.selectFirst("img.film-poster-img")
+                            ?.attr("data-src")
 
-                    Movie(
-                        id = it.selectFirst("a")
-                            ?.attr("href")?.substringAfterLast("-") ?: "",
-                        title = it.selectFirst("h3.film-name")
-                            ?.text() ?: "",
-                        released = info.released,
-                        quality = info.quality,
-                        rating = info.rating,
-                        poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
-                    )
-                },
-            )
-        )
+                        val isMovie = it.select("div.fd-infor span.fdi-item")
+                            .lastOrNull()
+                            ?.text() == "Movie"
 
-        categories.add(
-            Category(
-                name = "Trending TV Shows",
-                list = document.select("div#trending-tv div.flw-item").map {
-                    val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-
-                    TvShow(
-                        id = it.selectFirst("a")
-                            ?.attr("href")?.substringAfterLast("-") ?: "",
-                        title = it.selectFirst("h3.film-name")
-                            ?.text() ?: "",
-                        quality = info.quality,
-                        rating = info.rating,
-                        poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
-
-                        seasons = info.lastEpisode?.let { lastEpisode ->
-                            listOf(
-                                Season(
-                                    id = "",
-                                    number = lastEpisode.season,
-
-                                    episodes = listOf(
-                                        Episode(
-                                            id = "",
-                                            number = lastEpisode.episode,
-                                        )
-                                    )
-                                )
+                        if (isMovie) {
+                            Movie(
+                                id = id,
+                                title = title,
+                                poster = poster,
                             )
-                        } ?: listOf()
-                    )
-                },
-            )
-        )
+                        } else {
+                            TvShow(
+                                id = id,
+                                title = title,
+                                poster = poster,
 
-        categories.add(
-            Category(
-                name = "Latest Movies",
-                list = document.select("section.section-id-02")
-                    .find { it.selectFirst("h2.cat-heading")?.ownText() == "Latest Movies" }
-                    ?.select("div.flw-item")
-                    ?.map {
-                        val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-
-                        Movie(
-                            id = it.selectFirst("a")
-                                ?.attr("href")?.substringAfterLast("-") ?: "",
-                            title = it.selectFirst("h3.film-name")
-                                ?.text() ?: "",
-                            released = info.released,
-                            quality = info.quality,
-                            rating = info.rating,
-                            poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                                ?.attr("data-src"),
-                        )
-                    } ?: listOf(),
-            )
-        )
-
-        categories.add(
-            Category(
-                name = "Latest TV Shows",
-                list = document.select("section.section-id-02")
-                    .find { it.selectFirst("h2.cat-heading")?.ownText() == "Latest TV Shows" }
-                    ?.select("div.flw-item")
-                    ?.map {
-                        val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-
-                        TvShow(
-                            id = it.selectFirst("a")
-                                ?.attr("href")?.substringAfterLast("-") ?: "",
-                            title = it.selectFirst("h3.film-name")
-                                ?.text() ?: "",
-                            quality = info.quality,
-                            rating = info.rating,
-                            poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                                ?.attr("data-src"),
-
-                            seasons = info.lastEpisode?.let { lastEpisode ->
-                                listOf(
-                                    Season(
-                                        id = "",
-                                        number = lastEpisode.season,
-
-                                        episodes = listOf(
-                                            Episode(
+                                seasons = it.selectFirst("div.tick-sub")
+                                    ?.text()?.toIntOrNull()?.let { lastEpisode ->
+                                        listOf(
+                                            Season(
                                                 id = "",
-                                                number = lastEpisode.episode,
+                                                number = 0,
+
+                                                episodes = listOf(
+                                                    Episode(
+                                                        id = "",
+                                                        number = lastEpisode,
+                                                    )
+                                                )
                                             )
                                         )
-                                    )
-                                )
-                            } ?: listOf()
-                        )
-                    } ?: listOf(),
-            )
+                                    } ?: listOf(),
+                            )
+                        }
+                    }
+                )
+            }
+        )
+
+        categories.addAll(
+            document.select("section.block_area.block_area_home").mapNotNull { block ->
+                val name = block.selectFirst("h2.cat-heading")
+                    ?.text() ?: ""
+                if (name == "Top Upcoming") return@mapNotNull null
+
+                Category(
+                    name = name,
+                    list = block.select("div.flw-item").map {
+                        val id = it.selectFirst("a")
+                            ?.attr("href")?.substringAfterLast("/") ?: ""
+                        val title = it.selectFirst("h3.film-name")
+                            ?.text() ?: ""
+                        val runtime = it.selectFirst("div.fd-infor span.fdi-duration")
+                            ?.text()?.removeSuffix("m")?.toIntOrNull()
+                        val poster = it.selectFirst("img.film-poster-img")
+                            ?.attr("data-src")
+
+                        val isMovie = it.selectFirst("div.fd-infor span.fdi-item")
+                            ?.text() == "Movie"
+
+                        if (isMovie) {
+                            Movie(
+                                id = id,
+                                title = title,
+                                runtime = runtime,
+                                poster = poster,
+                            )
+                        } else {
+                            TvShow(
+                                id = id,
+                                title = title,
+                                runtime = runtime,
+                                poster = poster,
+
+                                seasons = it.selectFirst("div.tick-sub")
+                                    ?.text()?.toIntOrNull()?.let { lastEpisode ->
+                                        listOf(
+                                            Season(
+                                                id = "",
+                                                number = 0,
+
+                                                episodes = listOf(
+                                                    Episode(
+                                                        id = "",
+                                                        number = lastEpisode,
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    } ?: listOf(),
+                            )
+                        }
+                    }
+                )
+            }
         )
 
         return categories
@@ -223,7 +216,7 @@ object SflixProvider : Provider {
         if (query.isEmpty()) {
             val document = service.getHome()
 
-            val genres = document.select("div#sidebar_subs_genre li.nav-item a.nav-link")
+            val genres = document.select("div#sidebar_subs_genre a.nav-link")
                 .map {
                     Genre(
                         id = it.attr("href")
@@ -236,49 +229,34 @@ object SflixProvider : Provider {
             return genres
         }
 
-        val document = service.search(query.replace(" ", "-"), page)
+        val document = service.search(query.replace(" ", "+"), page)
 
         val results = document.select("div.flw-item").map {
             val id = it.selectFirst("a")
-                ?.attr("href")?.substringAfterLast("-") ?: ""
-            val title = it.selectFirst("h2.film-name")
+                ?.attr("href")?.substringAfterLast("/") ?: ""
+            val title = it.selectFirst("h3.film-name")
                 ?.text() ?: ""
-            val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-            val poster = it.selectFirst("div.film-poster > img.film-poster-img")
+            val runtime = it.selectFirst("span.fdi-duration")
+                ?.text()?.removeSuffix("m")?.toIntOrNull()
+            val poster = it.selectFirst("img.film-poster-img")
                 ?.attr("data-src")
 
-            if (it.isMovie()) {
+            val isMovie = it.selectFirst("div.fd-infor > span.fdi-item")
+                ?.text() == "Movie"
+
+            if (isMovie) {
                 Movie(
                     id = id,
                     title = title,
-                    released = info.released,
-                    quality = info.quality,
-                    rating = info.rating,
+                    runtime = runtime,
                     poster = poster,
                 )
             } else {
                 TvShow(
                     id = id,
                     title = title,
-                    quality = info.quality,
-                    rating = info.rating,
+                    runtime = runtime,
                     poster = poster,
-
-                    seasons = info.lastEpisode?.let { lastEpisode ->
-                        listOf(
-                            Season(
-                                id = "",
-                                number = lastEpisode.season,
-
-                                episodes = listOf(
-                                    Episode(
-                                        id = "",
-                                        number = lastEpisode.episode,
-                                    )
-                                )
-                            )
-                        )
-                    } ?: listOf(),
                 )
             }
         }
@@ -290,17 +268,16 @@ object SflixProvider : Provider {
         val document = service.getMovies(page)
 
         val movies = document.select("div.flw-item").map {
-            val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-
             Movie(
                 id = it.selectFirst("a")
-                    ?.attr("href")?.substringAfterLast("-") ?: "",
-                title = it.selectFirst("h2.film-name")
+                    ?.attr("href")?.substringAfterLast("/") ?: "",
+                title = it.selectFirst("h3.film-name")
                     ?.text() ?: "",
-                released = info.released,
-                quality = info.quality,
-                rating = info.rating,
-                poster = it.selectFirst("div.film-poster > img.film-poster-img")
+                overview = it.selectFirst("div.description")
+                    ?.text() ?: "",
+                runtime = it.selectFirst("span.fdi-duration")
+                    ?.text()?.removeSuffix("m")?.toIntOrNull(),
+                poster = it.selectFirst("img.film-poster-img")
                     ?.attr("data-src"),
             )
         }
@@ -309,36 +286,37 @@ object SflixProvider : Provider {
     }
 
     override suspend fun getTvShows(page: Int): List<TvShow> {
-        val document = service.getTvShows(page)
+        val document = service.getTvSeries(page)
 
         val tvShows = document.select("div.flw-item").map {
-            val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-
             TvShow(
                 id = it.selectFirst("a")
-                    ?.attr("href")?.substringAfterLast("-") ?: "",
-                title = it.selectFirst("h2.film-name")
+                    ?.attr("href")?.substringAfterLast("/") ?: "",
+                title = it.selectFirst("h3.film-name")
                     ?.text() ?: "",
-                quality = info.quality,
-                rating = info.rating,
-                poster = it.selectFirst("div.film-poster > img.film-poster-img")
+                overview = it.selectFirst("div.description")
+                    ?.text() ?: "",
+                runtime = it.selectFirst("div.fd-infor span.fdi-duration")
+                    ?.text()?.removeSuffix("m")?.toIntOrNull(),
+                poster = it.selectFirst("img.film-poster-img")
                     ?.attr("data-src"),
 
-                seasons = info.lastEpisode?.let { lastEpisode ->
-                    listOf(
-                        Season(
-                            id = "",
-                            number = lastEpisode.season,
+                seasons = it.selectFirst("div.tick-sub")
+                    ?.text()?.toIntOrNull()?.let { lastEpisode ->
+                        listOf(
+                            Season(
+                                id = "",
+                                number = 0,
 
-                            episodes = listOf(
-                                Episode(
-                                    id = "",
-                                    number = lastEpisode.episode,
+                                episodes = listOf(
+                                    Episode(
+                                        id = "",
+                                        number = lastEpisode,
+                                    )
                                 )
                             )
                         )
-                    )
-                } ?: listOf()
+                    } ?: listOf(),
             )
         }
 
@@ -351,88 +329,79 @@ object SflixProvider : Provider {
 
         val movie = Movie(
             id = id,
-            title = document.selectFirst("h2.heading-name")
+            title = document.selectFirst("div.anisc-detail h2.film-name")
                 ?.text() ?: "",
-            overview = document.selectFirst("div.description")
-                ?.ownText() ?: "",
-            released = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Released") ?: false }
-                ?.ownText()?.trim(),
-            runtime = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Duration") ?: false }
-                ?.ownText()?.removeSuffix("min")?.trim()?.toIntOrNull(),
-            trailer = document.selectFirst("iframe#iframe-trailer")
+            overview = document.selectFirst("div.anisc-detail div.film-description  > .text")
+                ?.text() ?: "",
+            released = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "Aired:" }
+                ?.selectFirst("span.name")?.text()?.substringBefore(" to"),
+            runtime = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "Duration:" }
+                ?.selectFirst("span.name")?.text()?.let {
+                    val hours = it.substringBefore("h").toIntOrNull() ?: 0
+                    val minutes = it.substringAfter("h ").substringBefore("m").toIntOrNull() ?: 0
+                    hours * 60 + minutes
+                },
+            trailer = document.select("section.block_area-promotions div.item")
+                .firstOrNull { it.attr("data-src").contains("youtube") }
                 ?.attr("data-src")?.substringAfterLast("/")
                 ?.let { "https://www.youtube.com/watch?v=${it}" },
-            quality = document.selectFirst(".fs-item > .quality")
-                ?.text()?.trim(),
-            rating = document.selectFirst(".fs-item > .imdb")
-                ?.text()?.trim()?.removePrefix("IMDB:")?.toDoubleOrNull(),
-            poster = document.selectFirst("div.detail_page-watch img.film-poster-img")
+            rating = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "MAL Score:" }
+                ?.selectFirst("span.name")?.text()?.toDoubleOrNull(),
+            poster = document.selectFirst("div.anisc-poster img")
                 ?.attr("src"),
-            banner = document.selectFirst("div.detail-container > div.cover_follow")
-                ?.attr("style")?.substringAfter("background-image: url(")?.substringBefore(");"),
 
-            genres = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Genre") ?: false }
+            genres = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "Genres:" }
                 ?.select("a")?.map {
                     Genre(
                         id = it.attr("href").substringAfter("/genre/"),
                         name = it.text(),
                     )
                 } ?: listOf(),
-            cast = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Casts") ?: false }
-                ?.select("a")?.map {
-                    People(
-                        id = it.attr("href").substringAfter("/cast/"),
-                        name = it.text(),
-                    )
+            cast = document.select("div.block-actors-content div.bac-item").map {
+                People(
+                    id = it.selectFirst("div.rtl a")
+                        ?.attr("href")?.substringAfterLast("/") ?: "",
+                    name = it.selectFirst("div.rtl h4.pi-name")
+                        ?.text() ?: "",
+                    image = it.selectFirst("div.rtl img")
+                        ?.attr("data-src"),
+                )
+            }.filter { it.name.isNotEmpty() },
+            recommendations = document.select("section.block_area_category")
+                .find { it.selectFirst("h2.cat-heading")?.text() == "Recommended for you" }
+                ?.select("div.flw-item")?.map {
+                    val showId = it.selectFirst("a")
+                        ?.attr("href")?.substringAfterLast("/") ?: ""
+                    val showTitle = it.selectFirst("h3.film-name")
+                        ?.text() ?: ""
+                    val showRuntime = it.selectFirst("div.fd-infor span.fdi-duration")
+                        ?.text()?.substringBefore("m")?.toIntOrNull()
+                    val showPoster = it.selectFirst("img")
+                        ?.attr("data-src")
+
+                    val isMovie = it.selectFirst("div.fd-infor > span.fdi-item")
+                        ?.text() == "Movie"
+
+                    if (isMovie) {
+                        Movie(
+                            id = showId,
+                            title = showTitle,
+                            runtime = showRuntime,
+                            poster = showPoster,
+                        )
+                    } else {
+                        TvShow(
+                            id = showId,
+                            title = showTitle,
+                            runtime = showRuntime,
+                            poster = showPoster,
+                        )
+                    }
                 } ?: listOf(),
-            recommendations = document.select("div.film_related div.flw-item").map {
-                val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-
-                if (it.isMovie()) {
-                    Movie(
-                        id = it.selectFirst("a")
-                            ?.attr("href")?.substringAfterLast("-") ?: "",
-                        title = it.selectFirst("h3.film-name")
-                            ?.text() ?: "",
-                        released = info.released,
-                        quality = info.quality,
-                        rating = info.rating,
-                        poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
-                    )
-                } else {
-                    TvShow(
-                        id = it.selectFirst("a")
-                            ?.attr("href")?.substringAfterLast("-") ?: "",
-                        title = it.selectFirst("h3.film-name")
-                            ?.text() ?: "",
-                        quality = info.quality,
-                        rating = info.rating,
-                        poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
-
-                        seasons = info.lastEpisode?.let { lastEpisode ->
-                            listOf(
-                                Season(
-                                    id = "",
-                                    number = lastEpisode.season,
-
-                                    episodes = listOf(
-                                        Episode(
-                                            id = "",
-                                            number = lastEpisode.episode,
-                                        )
-                                    )
-                                )
-                            )
-                        } ?: listOf(),
-                    )
-                }
-            },
         )
 
         return movie
@@ -444,118 +413,104 @@ object SflixProvider : Provider {
 
         val tvShow = TvShow(
             id = id,
-            title = document.selectFirst("h2.heading-name")
+            title = document.selectFirst("div.anisc-detail h2.film-name")
                 ?.text() ?: "",
-            overview = document.selectFirst("div.description")
-                ?.ownText() ?: "",
-            released = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Released") ?: false }
-                ?.ownText()?.trim(),
-            runtime = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Duration") ?: false }
-                ?.ownText()?.removeSuffix("min")?.trim()?.toIntOrNull(),
-            trailer = document.selectFirst("iframe#iframe-trailer")
+            overview = document.selectFirst("div.anisc-detail div.film-description  > .text")
+                ?.text() ?: "",
+            released = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "Aired:" }
+                ?.selectFirst("span.name")?.text()?.substringBefore(" to"),
+            runtime = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "Duration:" }
+                ?.selectFirst("span.name")?.text()?.let {
+                    val hours = it.substringBefore("h").toIntOrNull() ?: 0
+                    val minutes = it.substringAfter("h ").substringBefore("m").toIntOrNull() ?: 0
+                    hours * 60 + minutes
+                },
+            trailer = document.select("section.block_area-promotions div.item")
+                .firstOrNull { it.attr("data-src").contains("youtube") }
                 ?.attr("data-src")?.substringAfterLast("/")
                 ?.let { "https://www.youtube.com/watch?v=${it}" },
-            quality = document.selectFirst(".fs-item > .quality")
-                ?.text()?.trim(),
-            rating = document.selectFirst(".fs-item > .imdb")
-                ?.text()?.trim()?.removePrefix("IMDB:")?.toDoubleOrNull(),
-            poster = document.selectFirst("div.detail_page-watch img.film-poster-img")
+            rating = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "MAL Score:" }
+                ?.selectFirst("span.name")?.text()?.toDoubleOrNull(),
+            poster = document.selectFirst("div.anisc-poster img")
                 ?.attr("src"),
-            banner = document.selectFirst("div.detail-container > div.cover_follow")
-                ?.attr("style")?.substringAfter("background-image: url(")?.substringBefore(");"),
 
-            seasons = service.getTvShowSeasons(id)
-                .select("div.dropdown-menu.dropdown-menu-model > a")
-                .mapIndexed { seasonNumber, seasonElement ->
-                    Season(
-                        id = seasonElement.attr("data-id"),
-                        number = seasonNumber + 1,
-                        title = seasonElement.text(),
-                    )
-                },
-            genres = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Genre") ?: false }
+            seasons = listOf(
+                Season(
+                    id = id.substringAfterLast("-"),
+                    number = 0,
+                    title = "Episodes",
+                )
+            ),
+            genres = document.select("div.anisc-info div.item")
+                .find { it.selectFirst("span.item-head")?.text() == "Genres:" }
                 ?.select("a")?.map {
                     Genre(
                         id = it.attr("href").substringAfter("/genre/"),
                         name = it.text(),
                     )
                 } ?: listOf(),
-            cast = document.select("div.elements > .row > div > .row-line")
-                .find { it?.select(".type")?.text()?.contains("Casts") ?: false }
-                ?.select("a")?.map {
-                    People(
-                        id = it.attr("href").substringAfter("/cast/"),
-                        name = it.text(),
-                    )
+            cast = document.select("div.block-actors-content div.bac-item").map {
+                People(
+                    id = it.selectFirst("div.rtl a")
+                        ?.attr("href")?.substringAfterLast("/") ?: "",
+                    name = it.selectFirst("div.rtl h4.pi-name")
+                        ?.text() ?: "",
+                    image = it.selectFirst("div.rtl img")
+                        ?.attr("data-src"),
+                )
+            }.filter { it.name.isNotEmpty() },
+            recommendations = document.select("section.block_area_category")
+                .find { it.selectFirst("h2.cat-heading")?.text() == "Recommended for you" }
+                ?.select("div.flw-item")?.map {
+                    val showId = it.selectFirst("a")
+                        ?.attr("href")?.substringAfterLast("/") ?: ""
+                    val showTitle = it.selectFirst("h3.film-name")
+                        ?.text() ?: ""
+                    val showRuntime = it.selectFirst("div.fd-infor span.fdi-duration")
+                        ?.text()?.substringBefore("m")?.toIntOrNull()
+                    val showPoster = it.selectFirst("img")
+                        ?.attr("data-src")
+
+                    val isMovie = it.selectFirst("div.fd-infor > span.fdi-item")
+                        ?.text() == "Movie"
+
+                    if (isMovie) {
+                        Movie(
+                            id = showId,
+                            title = showTitle,
+                            runtime = showRuntime,
+                            poster = showPoster,
+                        )
+                    } else {
+                        TvShow(
+                            id = showId,
+                            title = showTitle,
+                            runtime = showRuntime,
+                            poster = showPoster,
+                        )
+                    }
                 } ?: listOf(),
-            recommendations = document.select("div.film_related div.flw-item").map {
-                val info = it.select("div.film-detail > div.fd-infor > span").toInfo()
-
-                if (it.isMovie()) {
-                    Movie(
-                        id = it.selectFirst("a")
-                            ?.attr("href")?.substringAfterLast("-") ?: "",
-                        title = it.selectFirst("h3.film-name")
-                            ?.text() ?: "",
-                        released = info.released,
-                        quality = info.quality,
-                        rating = info.rating,
-                        poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
-                    )
-                } else {
-                    TvShow(
-                        id = it.selectFirst("a")
-                            ?.attr("href")?.substringAfterLast("-") ?: "",
-                        title = it.selectFirst("h3.film-name")
-                            ?.text() ?: "",
-                        quality = info.quality,
-                        rating = info.rating,
-                        poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
-
-                        seasons = info.lastEpisode?.let { lastEpisode ->
-                            listOf(
-                                Season(
-                                    id = "",
-                                    number = lastEpisode.season,
-
-                                    episodes = listOf(
-                                        Episode(
-                                            id = "",
-                                            number = lastEpisode.episode,
-                                        )
-                                    )
-                                )
-                            )
-                        } ?: listOf(),
-                    )
-                }
-            },
         )
 
         return tvShow
     }
 
     override suspend fun getEpisodesBySeason(seasonId: String): List<Episode> {
-        val document = service.getSeasonEpisodes(seasonId)
+        val response = service.getTvShowEpisodes(tvShowId = seasonId)
 
-        val episodes = document.select("div.flw-item.film_single-item.episode-item.eps-item")
-            .mapIndexed { episodeNumber, episodeElement ->
-                Episode(
-                    id = episodeElement.attr("data-id"),
-                    number = episodeElement.selectFirst("div.episode-number")
-                        ?.text()?.substringAfter("Episode ")?.substringBefore(":")?.toIntOrNull()
-                        ?: episodeNumber,
-                    title = episodeElement.selectFirst("h3.film-name")
-                        ?.text() ?: "",
-                    poster = episodeElement.selectFirst("img")
-                        ?.attr("src"),
-                )
-            }
+        val episodes = Jsoup.parse(response.html).select("div.ss-list > a[href].ssl-item.ep-item").map {
+            Episode(
+                id = it.selectFirst("a")
+                    ?.attr("href")?.substringAfterLast("=") ?: "",
+                number = it.selectFirst("div.ssli-order")
+                    ?.text()?.toIntOrNull() ?: 0,
+                title = it.selectFirst("div.ep-name")
+                    ?.text() ?: "",
+            )
+        }
 
         return episodes
     }
@@ -567,49 +522,38 @@ object SflixProvider : Provider {
         val genre = Genre(
             id = id,
             name = document.selectFirst("h2.cat-heading")
-                ?.text()?.removeSuffix(" Movies and TV Shows") ?: "",
+                ?.text() ?: "",
 
             shows = document.select("div.flw-item").map {
                 val showId = it.selectFirst("a")
-                    ?.attr("href")?.substringAfterLast("-") ?: ""
-                val showTitle = it.selectFirst("h2.film-name")
+                    ?.attr("href")?.substringAfterLast("/") ?: ""
+                val showTitle = it.selectFirst("h3.film-name")
                     ?.text() ?: ""
-                val showInfo = it.select("div.film-detail > div.fd-infor > span").toInfo()
-                val showPoster = it.selectFirst("div.film-poster > img.film-poster-img")
+                val showOverview = it.selectFirst("div.description")
+                    ?.text() ?: ""
+                val showRuntime = it.selectFirst("div.fd-infor span.fdi-duration")
+                    ?.text()?.substringBefore("m")?.toIntOrNull()
+                val showPoster = it.selectFirst("img")
                     ?.attr("data-src")
 
-                if (it.isMovie()) {
+                val isMovie = it.selectFirst("div.fd-infor > span.fdi-item")
+                    ?.text() == "Movie"
+
+                if (isMovie) {
                     Movie(
                         id = showId,
                         title = showTitle,
-                        released = showInfo.released,
-                        quality = showInfo.quality,
-                        rating = showInfo.rating,
+                        overview = showOverview,
+                        runtime = showRuntime,
                         poster = showPoster,
                     )
                 } else {
                     TvShow(
                         id = showId,
                         title = showTitle,
-                        quality = showInfo.quality,
-                        rating = showInfo.rating,
+                        overview = showOverview,
+                        runtime = showRuntime,
                         poster = showPoster,
-
-                        seasons = showInfo.lastEpisode?.let { lastEpisode ->
-                            listOf(
-                                Season(
-                                    id = "",
-                                    number = lastEpisode.season,
-
-                                    episodes = listOf(
-                                        Episode(
-                                            id = "",
-                                            number = lastEpisode.episode,
-                                        )
-                                    )
-                                )
-                            )
-                        } ?: listOf(),
                     )
                 }
             }
@@ -620,72 +564,88 @@ object SflixProvider : Provider {
 
 
     override suspend fun getPeople(id: String, page: Int): People {
-        val document = service.getPeople(id, page)
+        val document = service.getPeople(id)
+
+        if (page > 1) {
+            return People(
+                id = id,
+                name = document.selectFirst("h4.name")
+                    ?.text() ?: "",
+                image = document.selectFirst("div.avatar img")
+                    ?.attr("src"),
+            )
+        }
 
         val people = People(
             id = id,
-            name = document.selectFirst("h2.cat-heading")
+            name = document.selectFirst("h4.name")
                 ?.text() ?: "",
+            image = document.selectFirst("div.avatar img")
+                ?.attr("src"),
 
-            filmography = document.select("div.flw-item").map {
-                val showId = it.selectFirst("a")
-                    ?.attr("href")?.substringAfterLast("-") ?: ""
-                val showTitle = it.selectFirst("h2.film-name")
+            filmography = document.select("div.bac-item").map {
+                val showId = it.selectFirst("div.anime-info a")
+                    ?.attr("href")?.substringAfterLast("/") ?: ""
+                val showTitle = it.selectFirst("div.anime-info h4.pi-name")
                     ?.text() ?: ""
-                val showInfo = it.select("div.film-detail > div.fd-infor > span").toInfo()
-                val showPoster = it.selectFirst("div.film-poster > img.film-poster-img")
-                    ?.attr("data-src")
+                val showReleased = it.selectFirst("div.anime-info div.pi-detail span.pi-cast")
+                    ?.text()?.substringAfterLast(", ")
+                val showPoster = it.selectFirst("div.anime-info img")
+                    ?.attr("src")
 
-                if (it.isMovie()) {
+                val isMovie = it.selectFirst("div.anime-info div.pi-detail span.pi-cast")
+                    ?.text()?.substringBefore(", ") == "Movie"
+
+                if (isMovie) {
                     Movie(
                         id = showId,
                         title = showTitle,
-                        released = showInfo.released,
-                        quality = showInfo.quality,
-                        rating = showInfo.rating,
+                        released = showReleased,
                         poster = showPoster,
                     )
                 } else {
                     TvShow(
                         id = showId,
                         title = showTitle,
-                        quality = showInfo.quality,
-                        rating = showInfo.rating,
+                        released = showReleased,
                         poster = showPoster,
-
-                        seasons = showInfo.lastEpisode?.let { lastEpisode ->
-                            listOf(
-                                Season(
-                                    id = "",
-                                    number = lastEpisode.season,
-
-                                    episodes = listOf(
-                                        Episode(
-                                            id = "",
-                                            number = lastEpisode.episode,
-                                        )
-                                    )
-                                )
-                            )
-                        } ?: listOf(),
                     )
                 }
-            },
+            }.distinctBy {
+                when (it) {
+                    is Movie -> it.id
+                    is TvShow -> it.id
+                    else -> it
+                }
+            }
         )
 
         return people
     }
 
+
     @SuppressLint("UnsafeOptInUsageError")
     override suspend fun getServers(id: String, videoType: PlayerFragment.VideoType): List<Video.Server> {
-        val servers = when (videoType) {
-            is PlayerFragment.VideoType.Movie -> service.getMovieServers(id)
-            is PlayerFragment.VideoType.Episode -> service.getEpisodeServers(id)
-        }.select("a")
+        val episodeId = when (videoType) {
+            is PlayerFragment.VideoType.Movie -> {
+                val response = service.getTvShowEpisodes(tvShowId = id.substringAfterLast("-"))
+
+                Jsoup.parse(response.html).select("div.ss-list > a[href].ssl-item.ep-item")
+                    .firstOrNull()
+                    ?.let {
+                        it.selectFirst("a")
+                            ?.attr("href")?.substringAfterLast("=")
+                    } ?: ""
+            }
+            is PlayerFragment.VideoType.Episode -> id
+        }
+
+        val servers = Jsoup.parse(service.getServers(episodeId).html)
+            .select("div.server-item[data-type][data-id]")
             .map {
                 Video.Server(
                     id = it.attr("data-id"),
-                    name = it.selectFirst("span")?.text()?.trim() ?: "",
+                    name = "${it.text().trim()} - ${it.attr("data-type").uppercase()}",
                 )
             }
 
@@ -701,33 +661,10 @@ object SflixProvider : Provider {
     }
 
 
-    private fun Element.isMovie(): Boolean = this.selectFirst("a")?.attr("href")
-        ?.contains("/movie/") ?: false
-
-    private fun Elements.toInfo() = this.map { it.text() }.let {
-        object {
-            val rating = it.find { s -> s.matches("^\\d(?:\\.\\d)?\$".toRegex()) }?.toDoubleOrNull()
-
-            val quality = it.find { s -> s in listOf("HD", "SD", "CAM", "TS", "HDRip") }
-
-            val released = it.find { s -> s.matches("\\d{4}".toRegex()) }
-
-            val lastEpisode = it.find { s -> s.matches("S\\d+\\s*:E\\d+".toRegex()) }?.let { s ->
-                val result = Regex("S(\\d+)\\s*:E(\\d+)").find(s)?.groupValues
-                object {
-                    val season = result?.getOrNull(1)?.toIntOrNull() ?: 0
-
-                    val episode = result?.getOrNull(2)?.toIntOrNull() ?: 0
-                }
-            }
-        }
-    }
-
-
-    interface SflixService {
+    interface AniwatchService {
 
         companion object {
-            fun build(): SflixService {
+            fun build(): AniwatchService {
                 val client = OkHttpClient.Builder()
                     .readTimeout(30, TimeUnit.SECONDS)
                     .connectTimeout(30, TimeUnit.SECONDS)
@@ -740,7 +677,7 @@ object SflixProvider : Provider {
                     .client(client)
                     .build()
 
-                return retrofit.create(SflixService::class.java)
+                return retrofit.create(AniwatchService::class.java)
             }
         }
 
@@ -748,47 +685,51 @@ object SflixProvider : Provider {
         @GET("home")
         suspend fun getHome(): Document
 
-        @GET("search/{query}")
-        suspend fun search(@Path("query") query: String, @Query("page") page: Int): Document
+        @GET("search")
+        suspend fun search(
+            @Query("keyword", encoded = true) keyword: String,
+            @Query("page") page: Int
+        ): Document
 
         @GET("movie")
         suspend fun getMovies(@Query("page") page: Int): Document
 
-        @GET("tv-show")
-        suspend fun getTvShows(@Query("page") page: Int): Document
+        @GET("tv")
+        suspend fun getTvSeries(@Query("page") page: Int): Document
 
 
-        @GET("movie/free-{id}")
+        @GET("{id}")
         suspend fun getMovie(@Path("id") id: String): Document
 
-        @GET("ajax/movie/episodes/{id}")
-        suspend fun getMovieServers(@Path("id") movieId: String): Document
 
-
-        @GET("tv/free-{id}")
+        @GET("{id}")
         suspend fun getTvShow(@Path("id") id: String): Document
 
-        @GET("ajax/v2/tv/seasons/{id}")
-        suspend fun getTvShowSeasons(@Path("id") tvShowId: String): Document
-
-        @GET("ajax/v2/season/episodes/{id}")
-        suspend fun getSeasonEpisodes(@Path("id") seasonId: String): Document
-
-        @GET("ajax/v2/episode/servers/{id}")
-        suspend fun getEpisodeServers(@Path("id") episodeId: String): Document
+        @GET("ajax/v2/episode/list/{id}")
+        suspend fun getTvShowEpisodes(@Path("id") tvShowId: String): Response
 
 
         @GET("genre/{id}")
         suspend fun getGenre(@Path("id") id: String, @Query("page") page: Int): Document
 
 
-        @GET("cast/{id}")
-        suspend fun getPeople(@Path("id") id: String, @Query("page") page: Int): Document
+        @GET("people/{id}")
+        suspend fun getPeople(@Path("id") id: String): Document
 
 
-        @GET("ajax/get_link/{id}")
-        suspend fun getLink(@Path("id") id: String): Link
+        @GET("ajax/v2/episode/servers")
+        suspend fun getServers(@Query("episodeId") episodeId: String): Response
 
+        @GET("ajax/v2/episode/sources")
+        suspend fun getLink(@Query("id") id: String): Link
+
+
+        data class Response(
+            val status: Boolean,
+            val html: String,
+            val totalItems: Int? = null,
+            val continueWatch: Boolean? = null,
+        )
 
         data class Link(
             val type: String = "",

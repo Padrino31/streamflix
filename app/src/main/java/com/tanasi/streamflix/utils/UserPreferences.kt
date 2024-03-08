@@ -30,7 +30,7 @@ object UserPreferences {
 
 
     val providers = listOf(
-//        SflixProvider,
+       SflixProvider,
 //        AnyMovieProvider,
         AniwatchProvider,
     )
